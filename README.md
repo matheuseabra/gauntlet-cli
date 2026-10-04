@@ -29,6 +29,8 @@ gauntlet check
 
 For an agent, use `gauntlet check --json`. Standard output contains only the versioned JSON result. The same result is saved to `.gauntlet/results.json` by default. Diagnostics go to standard error. `--quiet` suppresses human output and `--verbose` sends analyzer commands and their output to standard error.
 
+For a step-by-step example that builds a small project and repairs a surviving mutant, see the [Gauntlet workflow tutorial](docs/tutorial.md).
+
 ## Configuration
 
 `gauntlet init` creates `gauntlet.toml` and `.gauntlet/` without replacing an existing configuration.
