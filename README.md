@@ -12,181 +12,106 @@
   <a href="https://github.com/matheuseabra/gauntlet-cli/blob/main/LICENSE"><img src="https://img.shields.io/github/license/matheuseabra/gauntlet-cli" alt="MIT License"></a>
 </p>
 
-Gauntlet is a local Python CLI that runs deterministic repository checks and gives humans and coding agents one versioned findings file. Crapper checks complexity against test coverage, Mutator challenges tests with small source changes, and Dryer finds similar code for review. Gauntlet coordinates these tools; it does not implement its own analyzers or change source code.
+Gauntlet runs local quality checks on **changed code** and turns the results into actionable findings for you, CI, or a coding agent.
 
-Lint asks, “Does this violate static rules?” Tests ask, “Does expected behavior work?” Coverage asks, “Did tests execute this code?” Mutation asks, “Would tests notice if this code were wrong?” CRAP asks, “Is complexity becoming dangerous relative to test coverage?” Dryer asks, “Are similar implementations proliferating?”
+It uses three external analyzers:
 
-## Install
+| Tool | Question it answers |
+| --- | --- |
+| **Crapper** | Is this code too complex for its test coverage? |
+| **Mutator** | Would the tests notice a plausible defect? |
+| **Dryer** | Is similar code appearing in multiple places? |
 
-Gauntlet needs Python 3.12 or newer, Git, and the upstream `crapper`, `mutator`, and `dryer` commands for analysis. Install Gauntlet into an isolated tool environment:
+Gauntlet produces evidence. You or your coding agent investigate and repair the findings.
+
+## How it works
+
+```mermaid
+flowchart TD
+    Code["Changed code"] --> Checks["Project checks + coverage"]
+    Checks --> Tools["Crapper → Mutator → Dryer"]
+    Tools --> Findings["Findings + policy"]
+    Findings -->|"Pass, with any review findings"| Review["Review + merge"]
+    Findings -->|"Blocking finding"| Repair["Investigate + repair"]
+    Repair --> Code
+```
+
+`gauntlet check` runs this pipeline. A failed prerequisite stops analysis early. Coverage is generated once or reused. Findings appear in the terminal and in `.gauntlet/results.json`.
+
+## Get started
+
+You need **Python 3.12+**, **Git**, and the [Crapper](https://github.com/unclebob/crapper), [Mutator](https://github.com/unclebob/mutator), and [Dryer](https://github.com/unclebob/dryer) executables on your `PATH`. Install the analyzers separately.
+
+Install Gauntlet from this checkout:
 
 ```sh
 uv tool install .
-# or: pipx install .
+# Alternative: pipx install .
 ```
 
-Install [Crapper](https://github.com/unclebob/crapper), [Mutator](https://github.com/unclebob/mutator), and [Dryer](https://github.com/unclebob/dryer) separately and place their installed executables on `PATH`. Gauntlet never clones or installs analyzer dependencies. Each tool can instead be configured with an installed executable path. `gauntlet doctor` checks what is available and prints setup guidance.
-
-## Quick start
+Then, inside the project you want to check:
 
 ```sh
-cd path/to/repository
 gauntlet init
-# Configure a test and coverage command when the project does not already have usable coverage.
+# Set your test and coverage commands in gauntlet.toml when needed.
 gauntlet doctor
 gauntlet check
 ```
 
-`gauntlet check` defaults to `check --changed`. It includes staged, unstaged, and untracked source files. An empty source change passes. Use `--all` for every supported source file or name files and directories explicitly. Deleted files are ignored.
-
-For an agent, use `gauntlet check --json`. Standard output contains only the versioned JSON result. The same result is saved to `.gauntlet/results.json` by default. Diagnostics go to standard error. `--quiet` suppresses human output and `--verbose` sends analyzer commands and their output to standard error.
-
-For a step-by-step example that builds a small project and repairs a surviving mutant, see the [Gauntlet workflow tutorial](docs/tutorial.md). For module boundaries and the analysis lifecycle, see the [architecture guide](docs/architecture.md).
-
-## Configuration
-
-`gauntlet init` creates `gauntlet.toml` and `.gauntlet/` without replacing an existing configuration.
+Gauntlet detects common project commands. Explicit configuration overrides them. For example, a Python project using pytest and coverage.py can add:
 
 ```toml
-version = 1
-
-[gauntlet]
-mode = "changed"
-output = ".gauntlet/results.json"
-timeout = 120
-
 [commands]
-format = "uv run ruff format --check ."
-lint = "uv run ruff check ."
-typecheck = "uv run mypy src"
 test = "uv run pytest"
 coverage = "uv run coverage run -m pytest && uv run coverage lcov -o target/coverage/python/lcov.info"
-
-[tools.crapper]
-enabled = true
-threshold = 30
-
-[tools.mutator]
-enabled = true
-max_workers = 4
-timeout = 600
-
-[tools.dryer]
-enabled = true
-threshold = 0.82
-min_lines = 4
-min_nodes = 20
-
-[policy]
-crap_threshold = 30
-block_crap_regressions = true
-block_surviving_mutants = true
-block_duplicate_candidates = false
-
-[scope]
-include = ["src/domain/**", "src/services/**"]
-exclude = ["**/*.generated.*", "**/migrations/**", "**/fixtures/**", "**/ui/**"]
 ```
 
-Project commands run in this order: format, lint, typecheck, test, coverage. Configure only the checks the project uses. They stop the analysis when one fails. Commands are trusted local shell commands from `gauntlet.toml`; do not copy untrusted command strings into the file. Configure a coverage command that writes a format the analyzers support. Gauntlet accepts LCOV, Go `coverage.out`, JaCoCo XML, and Clojure HTML coverage. It does not parse coverage itself. The default Python detection uses the local environment's Python and `coverage.py`; other ecosystems are detected from their project files. Set commands explicitly when detection does not match the project.
+Configure only commands your project uses. `doctor` checks readiness without running tests. Follow the [sample project tutorial](docs/tutorial.md) for a complete walkthrough.
 
-Coverage is generated once by the configured coverage command. Crapper and Mutator receive `--use-existing-coverage`. Before running either tool, Gauntlet checks that an artifact exists for each selected language. A missing report fails closed. `scan` does not require coverage.
+## Everyday commands
 
-The upstream Crapper report has no file or line fields. Gauntlet runs Crapper once per selected file to preserve its source association, without guessing a function path. Mutator's function spans refine that location when available. The fallback CRAP policy uses changed files; with Mutator location data it uses changed function spans. It does not compare a historical CRAP baseline. Functions above CRAP 5 are review findings. A changed function above the configured threshold blocks by default.
+| Command | Use it to… |
+| --- | --- |
+| `gauntlet` or `gauntlet check` | Check staged, unstaged, and untracked source changes |
+| `gauntlet check --all` | Check the entire repository |
+| `gauntlet check src/domain` | Check a specific file or directory |
+| `gauntlet scan` | Inspect hotspots without tests, coverage, or mutation execution |
+| `gauntlet check --json` | Get JSON-only output for an agent or CI |
+| `gauntlet explain FINDING_ID` | Inspect a finding from the saved report |
 
-Mutator outcome offsets are UTF-8 byte positions. Gauntlet checks the source bytes before turning an outcome into a finding. A surviving mutant blocks by default. Upstream Mutator currently reports killed and survived outcomes; Gauntlet also reserves state names for uncovered, invalid, equivalent, accepted, and timeout outcomes. A survivor means investigation is required. Preserve specified behavior. Add the smallest meaningful test when a mutant changes that behavior. Do not change production code only to kill a mutant.
+An empty source change passes. Use `--verbose` for command diagnostics or `--quiet` to suppress terminal output. Run `gauntlet check --help` for all options.
 
-Dryer findings are review suggestions and do not block by default. Upstream changed mode compares selected changed files with each other. It cannot find a duplicate against an unchanged file in the current release. Dryer currently does not analyze JavaScript or JSX files. Gauntlet marks Dryer as skipped when the selection contains no language Dryer supports.
+## Act on findings
 
-## Commands
+| Finding | Default | What to do |
+| --- | --- | --- |
+| Surviving mutant | Blocks | Determine whether behavior changed. If it did, add the smallest meaningful test. |
+| High CRAP on changed code | Blocks | Simplify branching or improve meaningful tests while preserving behavior. |
+| Structural duplication | Review | Decide whether the similarity is accidental, intentional, or coincidental before refactoring. |
 
-```text
-gauntlet check [--changed | --all] [PATH ...]
-gauntlet scan [--changed | --all] [PATH ...]
-gauntlet doctor
-gauntlet init
-gauntlet explain FINDING_ID
-```
+A survivor requires investigation. Do not change production behavior just to kill a mutant, or deduplicate code just to remove a finding. Known findings can be accepted with an ID and a reason in `.gauntlet/accept.toml`.
 
-`check` runs prerequisites, coverage, and enabled analyzers. `scan` inspects complexity, mutation sites, and duplication without executing mutants or test commands. `doctor` checks Git, configuration, installed commands, project tools, and coverage artifacts without executing project commands. `explain` reads `.gauntlet/results.json` and presents one finding. Use `--no-crap`, `--no-mutate`, or `--no-dry` to skip an analyzer for a run. You can pass `--output PATH` to write the JSON result elsewhere.
+A passing check exits with `0`; blocking findings exit with `3`. Review findings alone pass. See the [reference](docs/reference.md#exit-codes) for error exit codes.
 
-Each tool accepts an installed executable through configuration:
+## Use with a coding agent or CI
 
-```toml
-[tools.crapper]
-command = "../crapper/.venv/bin/crapper"
-
-[tools.mutator]
-command = "../mutator/.venv/bin/mutator"
-
-[tools.dryer]
-command = "../dryer/.venv/bin/dryer"
-```
-
-The `checkout` field can point to a sibling checkout with an installed `.venv/bin` executable. Gauntlet does not invoke upstream bootstrap scripts.
-
-## Findings and policy
-
-The result has schema `version: 1`, stable IDs, sorted findings, checks, and a summary. Every finding has a general severity (`info`, `review`, `warning`, or `error`), a location when the tool can supply one, tool metadata, and a `blocking` decision. Reports contain no timestamps or durations, so equivalent repository and analyzer state produces stable JSON.
-
-High CRAP in an unchanged function does not block. CRAP regression checks use changed function spans when Mutator supplies them; without those spans, the initial policy uses changed files as an approximation. Moderate CRAP and Dryer candidates need review. A surviving mutant blocks by default. These rules do not reward 100% coverage, a perfect mutation score, zero duplication, or minimum complexity.
-
-To accept a known finding, add an ID and a reason to `.gauntlet/accept.toml`:
-
-```toml
-[[finding]]
-id = "mutator:0123456789abcdef01234567"
-reason = "Equivalent for the validated integer-only input domain."
-```
-
-Accepted findings remain in JSON and no longer block. Gauntlet reports acceptance entries that were not observed in the current run; this can happen when a changed-only run does not include the finding.
-
-## Agent instructions
-
-Add a project-specific definition of done to `AGENTS.md`:
+Add this rule to your project's `AGENTS.md`:
 
 ```md
-## Definition of Done
-
-Before considering a coding task complete, run `gauntlet check`.
-
-Do not bypass or weaken Gauntlet checks.
-
-For surviving mutants, determine whether the mutant changes specified
-observable behavior. If it does, add or improve the smallest meaningful test.
-Do not modify production code solely to kill a mutant.
-
-For CRAP findings, preserve behavior. Simplify excessive branching or improve
-meaningful tests when appropriate.
-
-For Dryer findings, do not automatically deduplicate. First determine whether
-the similarity is accidental, intentional, coincidental, or indicates a
-missing domain abstraction.
-
-Re-run Gauntlet after making repairs.
+Before finishing a coding task, run `gauntlet check`.
+Investigate findings, preserve specified behavior, and rerun after repairs.
+Do not bypass or weaken the checks.
 ```
 
-CI can run the same local command without a Gauntlet server or provider API:
+For machine-readable results, run `gauntlet check --json`. It prints only JSON to stdout and also saves `.gauntlet/results.json`. Gauntlet runs locally and makes no LLM calls or source uploads.
 
-```yaml
-- name: Gauntlet
-  run: gauntlet check --changed --json
-```
+## More details
 
-Archive `.gauntlet/results.json` as a CI artifact if useful. Gauntlet does not upload source or findings.
+- [Tutorial](docs/tutorial.md): build a sample project and repair a test gap.
+- [Reference](docs/reference.md): configuration, coverage, accepted findings, CI, and exit codes.
+- [Architecture](docs/architecture.md): modules, adapter boundaries, and execution flow.
 
-## Exit codes
-
-| Code | Meaning |
-| ---: | --- |
-| `0` | Passed; review findings can be present |
-| `1` | Gauntlet or analyzer error |
-| `2` | Prerequisite command or Mutator baseline failed |
-| `3` | A blocking finding was reported |
-| `4` | Invalid configuration, path, or repository context |
-| `5` | Required external tool, command, or coverage artifact is missing |
-
-## Development
+## Develop Gauntlet
 
 ```sh
 uv sync --extra dev
@@ -195,5 +120,3 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run gauntlet --help
 ```
-
-The tools are external CLIs. Gauntlet normalizes their EDN snapshots; it does not replace them with a dashboard, database, remote service, language-specific analyzer, or LLM call.

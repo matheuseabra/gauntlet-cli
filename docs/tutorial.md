@@ -179,4 +179,4 @@ The boundary test should kill a comparison mutant at the trial expiry. If anothe
 
 Repeat the test and check steps until the changed behavior has evidence you trust. For an agent or CI job, use `gauntlet check --changed --json`; Gauntlet prints the structured result to standard output and saves `.gauntlet/results.json`.
 
-For configuration options, exit codes, and the full policy, return to the [README](../README.md).
+For configuration options, exit codes, and policy details, see the [reference](reference.md).
