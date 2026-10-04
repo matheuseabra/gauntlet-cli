@@ -1,0 +1,8 @@
+version = 1
+
+[tools.crapper]
+enabled = false
+[tools.mutator]
+enabled = false
+[tools.dryer]
+enabled = false
