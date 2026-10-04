@@ -26,16 +26,6 @@ Gauntlet produces evidence. You or your coding agent investigate and repair the 
 
 ## How it works
 
-```mermaid
-flowchart TD
-    Code["Changed code"] --> Checks["Project checks + coverage"]
-    Checks --> Tools["Crapper → Mutator → Dryer"]
-    Tools --> Findings["Findings + policy"]
-    Findings -->|"Pass, with any review findings"| Review["Review + merge"]
-    Findings -->|"Blocking finding"| Repair["Investigate + repair"]
-    Repair --> Code
-```
-
 `gauntlet check` runs this pipeline. A failed prerequisite stops analysis early. Coverage is generated once or reused. Findings appear in the terminal and in `.gauntlet/results.json`.
 
 ## Get started
