@@ -22,6 +22,10 @@ It uses three external analyzers:
 | **Mutator** | Would the tests notice a plausible defect? |
 | **Dryer** | Is similar code appearing in multiple places? |
 
+## Acknowledgments
+
+Gauntlet builds on three tools by [Robert C. Martin (Uncle Bob)](https://github.com/unclebob): [Crapper](https://github.com/unclebob/crapper), [Mutator](https://github.com/unclebob/mutator), and [Dryer](https://github.com/unclebob/dryer).
+
 Gauntlet produces evidence. You or your coding agent investigate and repair the findings.
 
 ## How it works
