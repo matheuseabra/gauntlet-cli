@@ -1,6 +1,18 @@
-# Gauntlet
+<p align="center">
+  <img src="docs/assets/gauntlet-logo.png" alt="Gold cosmic gauntlet with six luminous stones" width="240">
+</p>
 
-**Make the code prove itself.** Gauntlet is a local Python CLI that runs deterministic repository checks and gives humans and coding agents one versioned findings file. Crapper checks complexity against test coverage, Mutator challenges tests with small source changes, and Dryer finds similar code for review. Gauntlet coordinates these tools; it does not implement its own analyzers or change source code.
+<h1 align="center">Gauntlet</h1>
+
+<p align="center"><strong>Make the code prove itself.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/matheuseabra/gauntlet-cli/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/version-0.1.0-4c6ef5?logo=python&logoColor=white" alt="Version 0.1.0"></a>
+  <a href="https://github.com/matheuseabra/gauntlet-cli/actions/workflows/ci.yml"><img src="https://github.com/matheuseabra/gauntlet-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="https://github.com/matheuseabra/gauntlet-cli/blob/main/LICENSE"><img src="https://img.shields.io/github/license/matheuseabra/gauntlet-cli" alt="MIT License"></a>
+</p>
+
+Gauntlet is a local Python CLI that runs deterministic repository checks and gives humans and coding agents one versioned findings file. Crapper checks complexity against test coverage, Mutator challenges tests with small source changes, and Dryer finds similar code for review. Gauntlet coordinates these tools; it does not implement its own analyzers or change source code.
 
 Lint asks, “Does this violate static rules?” Tests ask, “Does expected behavior work?” Coverage asks, “Did tests execute this code?” Mutation asks, “Would tests notice if this code were wrong?” CRAP asks, “Is complexity becoming dangerous relative to test coverage?” Dryer asks, “Are similar implementations proliferating?”
 
@@ -29,7 +41,7 @@ gauntlet check
 
 For an agent, use `gauntlet check --json`. Standard output contains only the versioned JSON result. The same result is saved to `.gauntlet/results.json` by default. Diagnostics go to standard error. `--quiet` suppresses human output and `--verbose` sends analyzer commands and their output to standard error.
 
-For a step-by-step example that builds a small project and repairs a surviving mutant, see the [Gauntlet workflow tutorial](docs/tutorial.md).
+For a step-by-step example that builds a small project and repairs a surviving mutant, see the [Gauntlet workflow tutorial](docs/tutorial.md). For module boundaries and the analysis lifecycle, see the [architecture guide](docs/architecture.md).
 
 ## Configuration
 
