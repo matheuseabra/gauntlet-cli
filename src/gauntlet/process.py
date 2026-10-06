@@ -34,12 +34,15 @@ def _stop(process: subprocess.Popen) -> None:
         process.kill()
 
 
-def run(command: list[str], cwd: Path, timeout: float = 120) -> ProcessResult:
+def run(
+    command: list[str], cwd: Path, timeout: float = 120, env: dict[str, str] | None = None
+) -> ProcessResult:
     started = time.monotonic()
     try:
         process = subprocess.Popen(
             command,
             cwd=cwd,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -69,7 +72,9 @@ def run(command: list[str], cwd: Path, timeout: float = 120) -> ProcessResult:
     )
 
 
-def run_shell(command: str, cwd: Path, timeout: float) -> ProcessResult:
+def run_shell(
+    command: str, cwd: Path, timeout: float, env: dict[str, str] | None = None
+) -> ProcessResult:
     """Only explicitly trusted configured commands use a shell."""
     argv = ["/bin/sh", "-c", command] if os.name == "posix" else ["cmd", "/c", command]
-    return run(argv, cwd, timeout)
+    return run(argv, cwd, timeout, env=env)

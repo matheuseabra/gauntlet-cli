@@ -32,10 +32,10 @@ jobs:
         run: uv run python -m unittest discover -s tests -v
 
       - name: Lint
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests benchmarks
 
       - name: Check formatting
-        run: uv run ruff format --check src tests
+        run: uv run ruff format --check src tests benchmarks
 
       - name: Build package
         run: uv build
@@ -53,3 +53,30 @@ jobs:
         uses: ./
       - name: Verify installed CLI and real analyzers
         run: bash tests/integration/smoke_setup.sh
+      - name: Verify native mutation budgets and test-change invalidation
+        run: python -m tests.integration.smoke_cost
+      - name: Evaluate scripted diagnostic controls
+        run: |
+          python -m benchmarks.runner \
+            --without "python $GITHUB_WORKSPACE/benchmarks/proxy.py" \
+            --with "python $GITHUB_WORKSPACE/benchmarks/proxy.py" \
+            --subject-kind scripted-proxy --timeout 120 \
+            --output .gauntlet/scripted-controls.json
+          python - <<'PY'
+          import json
+          data = json.load(open('.gauntlet/scripted-controls.json'))
+          assert data['subject_kind'] == 'scripted-proxy'
+          assert all(r['subject_exit'] == 0 for r in data['records'])
+          assert data['summary']['without']['gate_passed_oracle_failed'] == 1
+          assert data['summary']['without']['oracle_passed_gate_blocked'] == 1
+          assert data['summary']['with']['oracle_passes'] == 2
+          assert all(r['gate']['passed'] for r in data['records'] if r['arm'] == 'with')
+          PY
+      - name: Save diagnostic evidence for this head
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scripted-controls-${{ github.sha }}
+          path: .gauntlet/scripted-controls.json
+          include-hidden-files: true
+          if-no-files-found: warn

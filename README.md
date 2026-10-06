@@ -105,7 +105,7 @@ installing or syncing environments inside each mutant run. Configure only the co
 | `gauntlet check --json` | Get JSON-only output for an agent or CI |
 | `gauntlet explain FINDING_ID` | Inspect a finding from the saved report |
 
-An empty source selection passes without running project commands or analyzers; it does not verify unsupported source, test-only changes, or product behavior. Use `--verbose` for command diagnostics or `--quiet` to suppress terminal output. Run `gauntlet check --help` for all options.
+Recognized unsupported code fails preflight; see the [language/coverage matrix](docs/language-support.md). An empty source selection passes without running project commands or analyzers; it does not verify test-only changes or product behavior. Use `--verbose` for command diagnostics or `--quiet` to suppress terminal output. Run `gauntlet check --help` for all options.
 
 ## Act on findings
 
@@ -117,11 +117,15 @@ An empty source selection passes without running project commands or analyzers; 
 
 A survivor requires investigation. Don't change production behavior just to kill a mutant, or deduplicate code just to remove a finding. Known findings can be accepted with an ID and a reason in `.gauntlet/accept.toml`.
 
+Use `--max-mutants N` and `--timeout SECONDS` to budget mutation. Truncated analysis is `partial`, exits nonzero, and reports completion counts. JSON and terminal output include stage timings; unchanged verified Python inputs can reuse mutation evidence. See [runtime controls](docs/reference.md#mutation-runtime-controls).
+
+CRAP thresholds and review modes can be configured by path; acceptance entries can have an expiry date. `explain` includes guidance on equivalents and score-driven refactors.
+
 A passing check exits with `0`; blocking findings exit with `3`. Review findings alone pass. See the [reference](https://github.com/matheuseabra/gauntlet-cli/blob/main/docs/reference.md#exit-codes) for error exit codes.
 
 ## Use with a coding agent or CI
 
-Give your agent a gate it can't talk its way past. Add this rule to your project's `AGENTS.md`:
+Give your agent explicit evidence and triage rules. Add this rule to your project's `AGENTS.md`:
 
 ```text
 Before finishing uncommitted work, run `gauntlet check --changed`.
@@ -169,6 +173,8 @@ not provision a remote agent.
 
 - [Tutorial](https://github.com/matheuseabra/gauntlet-cli/blob/main/docs/tutorial.md): build a sample project and repair a test gap.
 - [Reference](https://github.com/matheuseabra/gauntlet-cli/blob/main/docs/reference.md): configuration, coverage, accepted findings, CI, and exit codes.
+- [Language support](docs/language-support.md): pinned analyzer capabilities and verified coverage formats.
+- [Evaluation](docs/evaluation.md): paired command harness, independent oracles, and negative results.
 - [Architecture](https://github.com/matheuseabra/gauntlet-cli/blob/main/docs/architecture.md): modules, adapter boundaries, and execution flow.
 
 ## Contributing
@@ -176,12 +182,13 @@ not provision a remote agent.
 ```bash
 uv sync --extra dev
 uv run python -m unittest discover -s tests -v
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src tests benchmarks
+uv run ruff format --check src tests benchmarks
 uv build
 uv run gauntlet --help
 # With the shared tool environment activated:
 bash tests/integration/smoke_setup.sh
+python -m tests.integration.smoke_cost
 ```
 
 ## License

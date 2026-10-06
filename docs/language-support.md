@@ -9,7 +9,7 @@ Other versions and languages not listed here are **unverified**.
 | Language | Crapper / coverage | Mutator / coverage | Dryer / coverage | Status |
 | --- | --- | --- | --- | --- |
 | Python | Verified / coverage.py LCOV | Verified / LCOV covered lines | Verified / none needed | Source verified; real pipeline exercised |
-| TypeScript / TSX | Verified / LCOV (branches when available) | Verified / LCOV covered lines | Verified / none needed | Source verified; runtime tests recorded separately |
+| TypeScript / TSX | Verified / LCOV (branches when available) | Verified / LCOV covered lines | Verified / none needed | Source verified; runtime toolchain unverified |
 | Go | Verified / Go coverprofile | Verified / Go coverprofile covered lines | Verified / none needed | Source verified; runtime toolchain unverified |
 | Swift | Unsupported / none | Unsupported / none | Unsupported / none | Unsupported; no Swift coverage reader or adapter |
 | Java | Verified / JaCoCo XML instruction counters | Verified / JaCoCo XML covered lines | Verified / none needed | Source verified; runtime toolchain unverified |

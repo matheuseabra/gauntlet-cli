@@ -3,6 +3,7 @@
 ## Project Structure
 
 - `src/gauntlet/` contains the CLI package. Keep analyzer integrations in `adapters/`, orchestration and policy in `pipeline/`, and output formatting in `reporters/`.
+- `benchmarks/` contains the paired evaluation harness and diagnostic scripted controls; these controls are not evidence of AI effectiveness.
 - `tests/unit/` covers focused behavior; `tests/integration/` exercises the CLI. `tests/fixtures/` holds sample repositories and source files.
 - `README.md` documents user-facing behavior and configuration. `pyproject.toml` defines package metadata and tool settings; `uv.lock` pins development dependencies.
 
@@ -11,8 +12,8 @@
 Use Python 3.12 or newer. Run `uv sync --extra dev` to install the package and development tools.
 
 - `uv run python -m unittest discover -s tests -v` runs unit and CLI integration tests.
-- `uv run ruff check src tests` runs lint checks.
-- `uv run ruff format --check src tests` verifies formatting.
+- `uv run ruff check src tests benchmarks` runs lint checks.
+- `uv run ruff format --check src tests benchmarks` verifies formatting.
 - `uv build` builds the distributable package.
 - `uv run python -m gauntlet --help` runs the CLI from the checkout.
 
