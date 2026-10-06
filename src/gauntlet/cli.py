@@ -8,9 +8,9 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from gauntlet import __version__, git
+from gauntlet import __version__, git, support
 from gauntlet.config import DEFAULT_CONFIG, TOOLS, load
-from gauntlet.discovery import detect, source_files
+from gauntlet.discovery import detect
 from gauntlet.doctor import diagnose
 from gauntlet.errors import GauntletError
 from gauntlet.models import Results, RunContext
@@ -65,12 +65,13 @@ def _check(args: argparse.Namespace) -> Results:
     comparison = git.compare(root, args.base) if args.base is not None else None
     changed = comparison.files if comparison else git.changed_files(root)
     mode = "changed" if comparison else args.mode or ("all" if args.paths else config.mode)
-    candidates = changed if mode == "changed" else source_files(root)
+    candidates = changed if mode == "changed" else support.candidates(root)
     selected = select(root, candidates, config, args.paths)
     tools = dict(config.tools)
     for name, disabled in zip(TOOLS, (args.no_crap, args.no_mutate, args.no_dry), strict=True):
         tools[name] = replace(tools[name], enabled=False) if disabled else tools[name]
     config = replace(config, tools=tools, commands=project.commands | config.commands)
+    support.require(root, candidates, config, args.paths)
     native = (
         comparison is None
         and mode == "changed"

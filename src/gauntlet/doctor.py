@@ -3,7 +3,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from gauntlet import git
+from gauntlet import git, support
 from gauntlet.adapters.base import resolve
 from gauntlet.config import TOOLS, load
 from gauntlet.discovery import detect
@@ -100,6 +100,8 @@ def diagnose(directory: Path) -> Results:
         config = load(root)
         accepted(root)
         results.checks["configuration"] = "passed"
+        support.require(root, git.changed_files(root), config)
+        results.checks["language-support"] = "passed"
         project = detect(root)
         context = RunContext(root, "changed", [], [], config)
         _analyze_tools(results, context)
