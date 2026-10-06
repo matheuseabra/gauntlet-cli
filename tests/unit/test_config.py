@@ -45,12 +45,27 @@ class ConfigTests(unittest.TestCase):
             "[tools.dryer]\nthreshold = 1.1",
             '[policy]\nblock_surviving_mutants = "yes"',
             '[commands]\nother = "run"',
+            "[tools.mutator]\nmax_mutants = 0",
+            '[tools.mutator]\ncache = "true"',
+            "[tools.mutator]\ntimeout = nan",
+            '[[policy.crap_paths]]\nglob = "src/**"\nmode = []',
         ):
             with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
                 Path(directory, "gauntlet.toml").write_text(content)
                 with self.assertRaises(GauntletError) as raised:
                     load(Path(directory))
                 self.assertEqual(raised.exception.code, 4)
+
+    def test_mutation_budget_and_cache_settings_are_loaded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "gauntlet.toml").write_text(
+                "[tools.mutator]\nmax_mutants=10\ntimeout=2.5\ncache=false\n"
+            )
+            tool = load(root).tools["mutator"]
+            self.assertEqual(tool.max_mutants, 10)
+            self.assertEqual(tool.timeout, 2.5)
+            self.assertFalse(tool.cache)
 
     def test_malformed_toml_fails_as_configuration_error(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -136,7 +136,11 @@ class CliIntegrationTests(unittest.TestCase):
             accepted_data = json.loads(accepted.stdout)
             self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             self.assertTrue(
-                all(f["accepted"] and not f["blocking"] for f in accepted_data["findings"])
+                all(
+                    f["accepted"] and not f["blocking"]
+                    for f in accepted_data["findings"]
+                    if f["tool"] != "gauntlet"
+                )
             )
 
             # A clean committed head must retain the changed lines for CRAP
@@ -205,6 +209,11 @@ from pathlib import Path
 MUTATOR_TOOL = """#!/usr/bin/env python3
 import json
 from pathlib import Path
+import sys
+if "--scan" in sys.argv:
+    print("Scan: 1 mutation sites in src/retry.py")
+    print("  src/retry.py:2 >= -> >  [defn/allowed]")
+    raise SystemExit(0)
 source = Path("src/retry.py").read_bytes()
 start = source.index(b">=")
 key = json.dumps(["src/retry.py", "retry", "defn/allowed", start, start+2, ">=", ">"])

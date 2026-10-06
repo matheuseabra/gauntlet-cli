@@ -61,6 +61,8 @@ class Results:
     diagnostics: list[str] = field(default_factory=list)
     exit_code: int = 0
     version: int = 1
+    timings_ms: dict[str, int] = field(default_factory=dict)
+    mutation: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         data = asdict(self)

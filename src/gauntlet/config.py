@@ -20,9 +20,18 @@ class ToolConfig:
     checkout: str | None = None
     threshold: float = 30
     max_workers: int = 4
+    max_mutants: int | None = None
+    cache: bool = True
     min_lines: int = 4
     min_nodes: int = 20
     timeout: float = 600
+
+
+@dataclass(frozen=True)
+class CrapPath:
+    glob: str
+    threshold: float = 30
+    mode: str = "block"
 
 
 @dataclass(frozen=True)
@@ -31,6 +40,7 @@ class Policy:
     block_crap_regressions: bool = True
     block_surviving_mutants: bool = True
     block_duplicate_candidates: bool = False
+    crap_paths: tuple[CrapPath, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -83,16 +93,16 @@ def _tool(name: str, raw: dict) -> ToolConfig:
     fields = {"enabled", "command", "checkout", "timeout"}
     fields |= {
         "crapper": {"threshold"},
-        "mutator": {"max_workers"},
+        "mutator": {"max_workers", "max_mutants", "cache"},
         "dryer": {"threshold", "min_lines", "min_nodes"},
     }[name]
     raw = table(raw, fields, f"tools.{name}")
     for key, value in raw.items():
-        if key == "enabled":
+        if key in {"enabled", "cache"}:
             validate(value, bool, f"tools.{name}.{key}")
         elif key in {"command", "checkout"}:
             validate(value, str, f"tools.{name}.{key}")
-        elif key in {"max_workers", "min_lines", "min_nodes"}:
+        elif key in {"max_workers", "max_mutants", "min_lines", "min_nodes"}:
             validate(value, int, f"tools.{name}.{key}", 1)
         else:
             validate(value, float, f"tools.{name}.{key}", 0.001 if key == "timeout" else 0)
@@ -108,6 +118,23 @@ def _patterns(raw: dict, key: str) -> tuple[str, ...]:
     for value in values:
         validate(value, str, f"scope.{key}")
     return tuple(values)
+
+
+def crap_paths(value: object, default_threshold: float) -> tuple[CrapPath, ...]:
+    if not isinstance(value, list):
+        raise GauntletError("policy.crap_paths must be an array of tables", 4)
+    rules = []
+    for row in value:
+        row = table(row, {"glob", "threshold", "mode"}, "policy.crap_paths")
+        validate(row.get("glob"), str, "crap_paths.glob")
+        threshold = row.get("threshold", default_threshold)
+        validate(threshold, float, "crap_paths.threshold", 0)
+        mode = row.get("mode", "block")
+        validate(mode, str, "crap_paths.mode")
+        if mode not in {"block", "review"}:
+            raise GauntletError("crap_paths.mode must be block or review", 4)
+        rules.append(CrapPath(row["glob"], threshold, mode))
+    return tuple(rules)
 
 
 def load(root: Path) -> Config:
@@ -137,6 +164,7 @@ def load(root: Path) -> Config:
     tools = table(raw.get("tools", {}), set(TOOLS), "tools")
     tool_configs = {name: _tool(name, tools.get(name, {})) for name in TOOLS}
     policy = table(raw.get("policy", {}), set(Policy.__dataclass_fields__), "policy")
+    rules = policy.pop("crap_paths", [])
     for key, value in policy.items():
         validate(
             value,
@@ -145,6 +173,7 @@ def load(root: Path) -> Config:
             0 if key == "crap_threshold" else None,
         )
     policy = {"crap_threshold": tool_configs["crapper"].threshold, **policy}
+    policy["crap_paths"] = crap_paths(rules, policy["crap_threshold"])
     scope = table(raw.get("scope", {}), {"include", "exclude"}, "scope")
     return Config(
         mode=options.get("mode", "changed"),

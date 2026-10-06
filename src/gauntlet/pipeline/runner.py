@@ -1,4 +1,5 @@
 import sys
+import time
 from dataclasses import replace
 
 from gauntlet import git
@@ -8,7 +9,7 @@ from gauntlet.adapters.mutator import MutatorAdapter, enrich
 from gauntlet.config import COMMANDS
 from gauntlet.errors import GauntletError
 from gauntlet.models import Results, RunContext
-from gauntlet.pipeline import coverage, policy
+from gauntlet.pipeline import coverage, policy, triage
 from gauntlet.pipeline.lock import repository_lock
 from gauntlet.process import run_shell
 
@@ -18,7 +19,11 @@ ADAPTERS = (CrapperAdapter, MutatorAdapter, DryerAdapter)
 def command(name: str, text: str, context: RunContext, results: Results) -> None:
     if context.verbose:
         print(f"[{name}] {text}", file=sys.stderr)
-    result = run_shell(text, context.root, context.config.timeout)
+    started = time.monotonic()
+    try:
+        result = run_shell(text, context.root, context.config.timeout)
+    finally:
+        results.timings_ms[name] = round((time.monotonic() - started) * 1000)
     if context.verbose:
         print(result.stdout, file=sys.stderr, end="")
         print(result.stderr, file=sys.stderr, end="")
@@ -61,11 +66,18 @@ def _analyze(context: RunContext, results: Results, accept: dict[str, str]) -> N
             results.checks[name] = "disabled"
             continue
         adapter = adapter_type()
+        started = time.monotonic()
         try:
             tool_result = adapter.run(context)
         except GauntletError as exc:
             exc.check = exc.check or name
             raise
+        finally:
+            results.timings_ms[name] = round((time.monotonic() - started) * 1000)
+        if name == "mutator":
+            results.mutation = tool_result.details
+            if tool_result.status == "partial":
+                results.status, results.exit_code = "partial", 6
         results.findings.extend(tool_result.findings)
         results.diagnostics.extend(tool_result.diagnostics)
         results.checks[name] = tool_result.status
@@ -81,14 +93,18 @@ def _analyze(context: RunContext, results: Results, accept: dict[str, str]) -> N
             results.findings, context.config, accept, context.changed_files, context.mode, ranges
         )
     )
+    results.findings.extend(triage.signals(context, results.findings, accept, ranges))
     for name in (adapter.name for adapter in ADAPTERS):
         findings = [f for f in results.findings if f.tool == name and not f.accepted]
         if any(f.blocking for f in findings):
             results.checks[name] = "failed"
-        elif any(f.severity in {"warning", "review"} for f in findings):
+        elif results.checks[name] != "partial" and any(
+            f.severity in {"warning", "review"} for f in findings
+        ):
             results.checks[name] = "review"
     if any(f.blocking for f in results.findings):
-        results.status, results.exit_code = "failed", 3
+        results.status = "partial" if results.status == "partial" else "failed"
+        results.exit_code = 3
 
 
 def run(context: RunContext) -> Results:
@@ -101,9 +117,14 @@ def run(context: RunContext) -> Results:
             "selected_files": context.selected_files,
         }
     )
+    results.timings_ms = dict.fromkeys(("coverage", "crapper", "mutator", "dryer"), 0)
     try:
         accept = policy.accepted(context.root)
         if not context.selected_files:
+            results.diagnostics.extend(
+                policy.apply(results.findings, context.config, accept, [], context.mode)
+            )
+            results.findings.extend(triage.new_tests(context))
             results.diagnostics.append(
                 "PASS: no relevant changes"
                 if context.mode == "changed"
