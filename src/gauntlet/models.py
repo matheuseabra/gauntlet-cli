@@ -86,3 +86,4 @@ class RunContext:
     quiet: bool = False
     verbose: bool = False
     function_files: list[str] | None = None
+    comparison_base: str | None = None

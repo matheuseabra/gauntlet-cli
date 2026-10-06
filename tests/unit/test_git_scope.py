@@ -6,7 +6,7 @@ from pathlib import Path
 from gauntlet.config import Config
 from gauntlet.discovery import source_file
 from gauntlet.errors import GauntletError
-from gauntlet.git import changed_files, changed_lines, parse_changed, root
+from gauntlet.git import changed_files, changed_lines, compare, parse_changed, root
 from gauntlet.scope import select
 
 
@@ -66,6 +66,71 @@ class GitScopeTests(unittest.TestCase):
             config = Config(include=("src/domain/**/*.py",))
             files = ["src/domain/rules.py", "src/domain/tests/test_rules.py", "src/ui/view.py"]
             self.assertEqual(select(root_path, files, config, []), ["src/domain/rules.py"])
+
+
+class CommittedGitTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = Path(self.temp.name)
+        git(self.repo, "init", "-q")
+        git(self.repo, "config", "user.email", "tests@example.invalid")
+        git(self.repo, "config", "user.name", "Tests")
+        (self.repo / "old.py").write_text("def old():\n    return 1\n")
+        self.base = self.commit()
+
+    def commit(self):
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-qm", "fixture")
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo, text=True
+        ).strip()
+
+    def test_committed_diff_preserves_names_and_excludes_deleted_and_untracked(self):
+        names = ["a space.py", "a\nnewline.py", "-option.py"]
+        for name in names:
+            (self.repo / name).write_text("value = 2\n")
+        (self.repo / "old.py").unlink()
+        head = self.commit()
+        (self.repo / "untracked.py").write_text("value = 3\n")
+        comparison = compare(self.repo, self.base)
+        self.assertCountEqual(comparison.files, names)
+        self.assertEqual(comparison.head_sha, head)
+        self.assertEqual(comparison.merge_base_sha, self.base)
+        self.assertEqual(changed_lines(self.repo, names, self.base)["-option.py"], [(1, 1)])
+
+    def test_renamed_file_is_analyzed_at_new_path(self):
+        git(self.repo, "mv", "old.py", "new.py")
+        self.commit()
+        self.assertEqual(compare(self.repo, self.base).files, ["new.py"])
+
+    def test_divergent_base_uses_common_ancestor(self):
+        git(self.repo, "checkout", "-qb", "base-branch")
+        (self.repo / "base-only.py").write_text("value = 1\n")
+        base_tip = self.commit()
+        git(self.repo, "checkout", "-qb", "feature", self.base)
+        (self.repo / "feature.py").write_text("value = 2\n")
+        self.commit()
+        comparison = compare(self.repo, base_tip)
+        self.assertEqual(comparison.files, ["feature.py"])
+        self.assertEqual(comparison.base_sha, base_tip)
+        self.assertEqual(comparison.merge_base_sha, self.base)
+
+    def test_empty_comparison_and_invalid_ref(self):
+        self.assertEqual(compare(self.repo, self.base).files, [])
+        for ref in ("0" * 40, "--help"):
+            with self.subTest(ref=ref), self.assertRaises(GauntletError) as error:
+                compare(self.repo, ref)
+            self.assertEqual(error.exception.code, 4)
+
+    def test_staged_and_unstaged_changes_fail_closed(self):
+        (self.repo / "old.py").write_text("def old():\n    return 2\n")
+        for staged in (False, True):
+            if staged:
+                git(self.repo, "add", "old.py")
+            with self.subTest(staged=staged), self.assertRaises(GauntletError) as error:
+                compare(self.repo, self.base)
+            self.assertEqual(error.exception.code, 4)
 
 
 if __name__ == "__main__":

@@ -125,14 +125,43 @@ missing domain abstraction.
 Re-run Gauntlet after making repairs.
 ```
 
-CI can run the same local command without a Gauntlet server or provider API:
+CI can run committed PR comparisons without a Gauntlet server or provider API:
 
 ```yaml
 - name: Gauntlet
-  run: gauntlet check --changed --json
+  run: gauntlet check --base "$BASE_SHA" --json
+  env:
+    BASE_SHA: ${{ github.event.pull_request.base.sha }}
 ```
 
 Archive `.gauntlet/results.json` as a CI artifact if useful. Gauntlet does not upload source or findings.
+
+`--base REF` is mutually exclusive with `--changed` and `--all`. It resolves REF
+and checked-out HEAD, requires a clean tracked working tree, and selects existing
+files changed since their unique merge base. Untracked files and deletions are
+excluded. Paths can further limit this selection. Missing/shallow history,
+invalid refs, or ambiguous merge bases fail with exit 4; no fallback full scan is
+performed. An empty selection passes without analysis. Changed line ranges come
+from the committed comparison, so high CRAP in an unchanged function remains
+nonblocking when function spans are available. This is not historical CRAP score
+comparison; Mutator still examines selected files rather than changed lines only.
+
+Results add `repository.base_sha`, `head_sha`, and `merge_base_sha` for these runs.
+The report schema stays at version 1 with additive repository metadata.
+
+## Explicit tool setup
+
+`bash scripts/setup-tools.sh ENVIRONMENT_PATH` installs this checkout's Gauntlet
+and external analyzers from `requirements-tools.txt` in one isolated environment.
+Python 3.12+ is required; use `GAUNTLET_PYTHON` to select an interpreter. It also
+prefetches supported parser grammars. Setup is network-enabled and separate from
+the CLI: checks never invoke it, clone dependencies, or silently install tools.
+Use the root composite action at a reviewed immutable commit for the same setup
+in Actions; it adds executables to PATH and exposes a `bin-path` output.
+
+Project dependencies and commands remain the consumer's responsibility. Bootstrap
+each cloud agent inside its own runtime, or use a provisioned environment; setup
+on the GitHub runner is insufficient for remote execution.
 
 ## Exit codes
 

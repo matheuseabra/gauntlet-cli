@@ -75,7 +75,7 @@ def _analyze(context: RunContext, results: Results, accept: dict[str, str]) -> N
             )
         if name == "mutator" and not context.scan:
             enrich(results.findings, adapter.snapshots, context)
-    ranges = git.changed_lines(context.root, context.changed_files)
+    ranges = git.changed_lines(context.root, context.changed_files, context.comparison_base)
     results.diagnostics.extend(
         policy.apply(
             results.findings, context.config, accept, context.changed_files, context.mode, ranges
