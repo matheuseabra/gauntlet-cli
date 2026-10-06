@@ -14,6 +14,7 @@ from gauntlet.discovery import detect
 from gauntlet.doctor import diagnose
 from gauntlet.errors import GauntletError
 from gauntlet.models import Results, RunContext
+from gauntlet.pipeline.crap import GUIDANCE as CRAP_GUIDANCE
 from gauntlet.pipeline.runner import run
 from gauntlet.pipeline.triage import GUIDANCE
 from gauntlet.reporters import json as json_reporter
@@ -150,6 +151,17 @@ def _explain(args: argparse.Namespace) -> None:
     if finding["rule"] == "surviving-mutant":
         print("\nTriage guidance\n" + GUIDANCE)
         print("Covering tests: " + json.dumps(finding["metadata"].get("covering_tests", [])))
+    if finding["rule"] == "crap-score":
+        print("\nTriage guidance\n" + CRAP_GUIDANCE)
+        for key in (
+            "cyclomatic_complexity",
+            "coverage_percent",
+            "threshold",
+            "recommended_lever",
+            "required_coverage_percent",
+            "lever_reason",
+        ):
+            print(f"{key}: {finding['metadata'].get(key, 'unavailable')}")
 
 
 def main(argv: list[str] | None = None) -> int:

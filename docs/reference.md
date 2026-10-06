@@ -325,3 +325,30 @@ new Python tests without syntactic assertions or recognized oracles, and new
 acceptances accompanying changed covered code. These are correlations, not proof
 of gaming. Helpers may assert; assertion presence does not prove an independent
 behavioral oracle. Other languages' assertion-free tests are currently unverified.
+
+## Path-specific CRAP policy
+
+```toml
+[[policy.crap_paths]]
+glob = "src/ui/**"
+threshold = 50
+mode = "review"
+
+[[policy.crap_paths]]
+glob = "src/domain/**"
+threshold = 25
+mode = "block"
+```
+
+The first matching rule wins. Unmatched paths retain global policy; an omitted
+rule threshold inherits `policy.crap_threshold`. `mode` is `block` or `review`.
+Review rules retain findings rather than excluding code. Block rules still require
+changed function spans (or the changed-file fallback) and respect the global
+`block_crap_regressions` setting.
+
+CRAP metadata includes complexity, coverage, effective threshold/mode/glob, a
+`recommended_lever`, and required coverage when calculable. If complexity itself
+exceeds the threshold, coverage alone cannot get below it. Otherwise the CRAP
+formula estimates coverage needed without structural changes. This is score
+leverage, not a measured cost estimate or proof that tests are meaningful.
+`explain` warns against splitting functions solely to lower a score.
