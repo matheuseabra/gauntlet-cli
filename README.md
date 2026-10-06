@@ -22,14 +22,14 @@ Coding agents make this worse. They produce a lot of code and a lot of passing t
 
 ## What Gauntlet does
 
-Gauntlet runs three complementary checks on **only the code you changed** and turns the results into deterministic, actionable findings: in your terminal, in CI, or fed straight back to a coding agent that can fix them.
+Gauntlet runs three complementary checks on **changed source files by default** and turns the results into deterministic, actionable findings: in your terminal, in CI, or fed straight back to a coding agent that can fix them.
 
 It's built on three analyzers by Robert C. Martin ([Uncle Bob](https://github.com/unclebob)). Gauntlet orchestrates them, scopes them to your diff, and merges their output into one report:
 
 | Analyzer | Question it answers | Why it matters |
 | --- | --- | --- |
 | [**Crapper**](https://github.com/unclebob/crapper) | Is this code too complex for its test coverage? | Complexity without tests is where regressions live. |
-| [**Mutator**](https://github.com/unclebob/mutator) | Would the tests notice a plausible defect? | Proves tests assert behavior, not just execute lines. |
+| [**Mutator**](https://github.com/unclebob/mutator) | Would the tests notice a plausible defect? | Finds behavior changes the tests do not distinguish. |
 | [**Dryer**](https://github.com/unclebob/dryer) | Is similar code appearing in multiple places? | Catches duplication before the copies diverge. |
 
 Gauntlet produces evidence. You or your coding agent investigate and repair the findings. It runs entirely on your machine: no LLM calls and no source uploads.
@@ -46,27 +46,31 @@ TODO: add a "What a finding looks like" section here with real output, e.g.
 
 ## How it works
 
-```
-git diff ─► coverage (generated or reused) ─► Crapper ─► Mutator ─► Dryer
-                                                                      │
-                                        terminal findings + .gauntlet/results.json
-```
-
-`gauntlet check` runs this pipeline on your changed source files. A failed prerequisite stops analysis early. Coverage is generated once or reused. Findings appear in the terminal and are saved to `.gauntlet/results.json`.
+`gauntlet check` selects source files, runs configured prerequisites and coverage,
+then invokes Crapper, Mutator, and Dryer. A failed prerequisite stops analysis
+early. Coverage is generated once or reused. Findings appear in the terminal and
+are saved to `.gauntlet/results.json`. Mutator examines functions in selected
+files; it is not restricted to changed lines. CRAP blocking uses changed function
+spans when available, with a changed-file fallback.
 
 ## Get started
 
-You need:
-
-- **Python 3.12+** and **Git**
-- The [Crapper](https://github.com/unclebob/crapper), [Mutator](https://github.com/unclebob/mutator), and [Dryer](https://github.com/unclebob/dryer) executables on your `PATH`. Install these separately; `gauntlet doctor` will tell you what's missing.
-
-Install Gauntlet from this checkout:
+You need **Python 3.12+**, **Git**, and network access for explicit tool setup.
+From a reviewed checkout of this repository, install Gauntlet and the compatible
+pinned analyzers together, then activate the environment:
 
 ```bash
-uv tool install .
-# Alternative: pipx install .
+bash scripts/setup-tools.sh "$HOME/.local/share/gauntlet/tools"
+source "$HOME/.local/share/gauntlet/tools/bin/activate"
 ```
+
+Set `GAUNTLET_PYTHON` if your compatible interpreter has a different name. This
+installer owns analyzer dependencies and parser grammar setup. It does not install
+your project's runtime or dependencies, and `check` never invokes it.
+
+If you already manage analyzer executables, `uv tool install .` or `pipx install .`
+installs only Gauntlet; make the compatible tools available on `PATH` or configure
+their executable paths. See [explicit setup](docs/reference.md#explicit-tool-setup).
 
 Then, inside the project you want to check:
 
@@ -81,11 +85,13 @@ Gauntlet detects common project commands, and explicit configuration overrides t
 
 ```toml
 [commands]
-test = "uv run pytest"
-coverage = "uv run coverage run -m pytest && uv run coverage lcov -o target/coverage/python/lcov.info"
+test = "python -m pytest"
+coverage = "python -m coverage run -m pytest && python -m coverage lcov -o target/coverage/python/lcov.info"
 ```
 
-Configure only the commands your project uses. `doctor` checks readiness without running tests. For a complete walkthrough, follow the [sample project tutorial](https://github.com/matheuseabra/gauntlet-cli/blob/main/docs/tutorial.md).
+Run those commands with the project Python and dependencies already available on
+PATH. Mutator runs the test command in isolated worker directories; avoid
+installing or syncing environments inside each mutant run. Configure only the commands your project uses. `doctor` checks readiness without running tests. For a complete walkthrough, follow the [sample project tutorial](https://github.com/matheuseabra/gauntlet-cli/blob/main/docs/tutorial.md).
 
 ## Everyday commands
 
@@ -99,7 +105,7 @@ Configure only the commands your project uses. `doctor` checks readiness without
 | `gauntlet check --json` | Get JSON-only output for an agent or CI |
 | `gauntlet explain FINDING_ID` | Inspect a finding from the saved report |
 
-An empty source change passes. Use `--verbose` for command diagnostics or `--quiet` to suppress terminal output. Run `gauntlet check --help` for all options.
+An empty source selection passes without running project commands or analyzers; it does not verify unsupported source, test-only changes, or product behavior. Use `--verbose` for command diagnostics or `--quiet` to suppress terminal output. Run `gauntlet check --help` for all options.
 
 ## Act on findings
 
@@ -118,7 +124,9 @@ A passing check exits with `0`; blocking findings exit with `3`. Review findings
 Give your agent a gate it can't talk its way past. Add this rule to your project's `AGENTS.md`:
 
 ```text
-Before finishing a coding task, run `gauntlet check`.
+Before finishing uncommitted work, run `gauntlet check --changed`.
+For committed PR changes, use `gauntlet check --base BASE_SHA` on a clean tracked tree.
+Report the selected scope and native validation alongside the gate result.
 Investigate findings, preserve specified behavior, and rerun after repairs.
 Do not bypass or weaken the checks.
 ```
@@ -139,6 +147,7 @@ setup. The [setup action](action.yml) runs the same installer in GitHub Actions:
 ```yaml
 - uses: actions/checkout@v4
   with:
+    ref: ${{ github.event.pull_request.head.sha }}
     fetch-depth: 0
     persist-credentials: false
 - uses: matheuseabra/gauntlet-cli@<reviewed-commit-sha>
@@ -165,7 +174,10 @@ uv sync --extra dev
 uv run python -m unittest discover -s tests -v
 uv run ruff check src tests
 uv run ruff format --check src tests
+uv build
 uv run gauntlet --help
+# With the shared tool environment activated:
+bash tests/integration/smoke_setup.sh
 ```
 
 ## License
