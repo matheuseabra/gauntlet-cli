@@ -127,7 +127,11 @@ Give your agent a gate it can't talk its way past. Add this rule to your project
 Before finishing uncommitted work, run `gauntlet check --changed`.
 For committed PR changes, use `gauntlet check --base BASE_SHA` on a clean tracked tree.
 Report the selected scope and native validation alongside the gate result.
-Investigate findings, preserve specified behavior, and rerun after repairs.
+Classify each survivor as real gap / equivalent / out-of-scope before acting.
+For a real gap, add a meaningful specification-based test.
+Record equivalents in accept.toml with a stable ID and concrete reason.
+Do not contort tests or change production behavior solely to kill a mutant.
+Preserve specified behavior and rerun after repairs.
 Do not bypass or weaken the checks.
 ```
 

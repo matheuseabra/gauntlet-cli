@@ -136,7 +136,11 @@ class CliIntegrationTests(unittest.TestCase):
             accepted_data = json.loads(accepted.stdout)
             self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             self.assertTrue(
-                all(f["accepted"] and not f["blocking"] for f in accepted_data["findings"])
+                all(
+                    f["accepted"] and not f["blocking"]
+                    for f in accepted_data["findings"]
+                    if f["tool"] != "gauntlet"
+                )
             )
 
             # A clean committed head must retain the changed lines for CRAP

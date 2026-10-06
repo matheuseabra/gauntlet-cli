@@ -8,7 +8,7 @@ from gauntlet.adapters.mutator import MutatorAdapter, enrich
 from gauntlet.config import COMMANDS
 from gauntlet.errors import GauntletError
 from gauntlet.models import Results, RunContext
-from gauntlet.pipeline import coverage, policy
+from gauntlet.pipeline import coverage, policy, triage
 from gauntlet.pipeline.lock import repository_lock
 from gauntlet.process import run_shell
 
@@ -81,6 +81,7 @@ def _analyze(context: RunContext, results: Results, accept: dict[str, str]) -> N
             results.findings, context.config, accept, context.changed_files, context.mode, ranges
         )
     )
+    results.findings.extend(triage.signals(context, results.findings, accept, ranges))
     for name in (adapter.name for adapter in ADAPTERS):
         findings = [f for f in results.findings if f.tool == name and not f.accepted]
         if any(f.blocking for f in findings):
@@ -104,6 +105,10 @@ def run(context: RunContext) -> Results:
     try:
         accept = policy.accepted(context.root)
         if not context.selected_files:
+            results.diagnostics.extend(
+                policy.apply(results.findings, context.config, accept, [], context.mode)
+            )
+            results.findings.extend(triage.new_tests(context))
             results.diagnostics.append(
                 "PASS: no relevant changes"
                 if context.mode == "changed"

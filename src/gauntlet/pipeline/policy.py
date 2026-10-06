@@ -1,33 +1,13 @@
-from pathlib import Path
-
-from gauntlet.config import Config, read_toml, table, validate
-from gauntlet.errors import GauntletError
+from gauntlet.config import Config
 from gauntlet.models import Finding
-
-
-def accepted(root: Path) -> dict[str, str]:
-    path = root / ".gauntlet/accept.toml"
-    if not path.exists():
-        return {}
-    data = table(read_toml(path), {"finding"}, "acceptance")
-    rows = data.get("finding", [])
-    if not isinstance(rows, list):
-        raise GauntletError("accept.toml requires [[finding]] entries", 4)
-    result = {}
-    for row in rows:
-        row = table(row, {"id", "reason"}, "accepted finding")
-        validate(row.get("id"), str, "finding.id")
-        validate(row.get("reason"), str, "finding.reason")
-        if row["id"] in result:
-            raise GauntletError(f"Duplicate accepted finding: {row['id']}", 4)
-        result[row["id"]] = row["reason"]
-    return result
+from gauntlet.pipeline.acceptance import accepted as accepted
+from gauntlet.pipeline.acceptance import apply_acceptances
 
 
 def apply(
     findings: list[Finding],
     config: Config,
-    accept: dict[str, str],
+    accept: dict,
     changed: list[str],
     mode: str,
     changed_lines: dict | None = None,
@@ -56,9 +36,4 @@ def apply(
             finding.blocking = policy.block_surviving_mutants
         elif finding.rule == "structural-duplication":
             finding.blocking = policy.block_duplicate_candidates
-        if finding.id in accept:
-            finding.accepted = True
-            finding.blocking = False
-            finding.metadata["acceptance_reason"] = accept[finding.id]
-    unknown = sorted(set(accept) - {finding.id for finding in findings})
-    return [f"Accepted finding was not observed in this run: {identity}" for identity in unknown]
+    return apply_acceptances(findings, accept)

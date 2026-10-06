@@ -15,6 +15,7 @@ from gauntlet.doctor import diagnose
 from gauntlet.errors import GauntletError
 from gauntlet.models import Results, RunContext
 from gauntlet.pipeline.runner import run
+from gauntlet.pipeline.triage import GUIDANCE
 from gauntlet.reporters import json as json_reporter
 from gauntlet.reporters import terminal
 from gauntlet.scope import select
@@ -146,6 +147,9 @@ def _explain(args: argparse.Namespace) -> None:
     for key in ("original", "replacement", "acceptance_reason", "instruction"):
         if key in finding["metadata"]:
             print(f"{key}: {finding['metadata'][key]}")
+    if finding["rule"] == "surviving-mutant":
+        print("\nTriage guidance\n" + GUIDANCE)
+        print("Covering tests: " + json.dumps(finding["metadata"].get("covering_tests", [])))
 
 
 def main(argv: list[str] | None = None) -> int:

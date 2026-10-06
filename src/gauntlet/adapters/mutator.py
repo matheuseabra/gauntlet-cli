@@ -6,6 +6,7 @@ from gauntlet.adapters import edn
 from gauntlet.adapters.base import Adapter, ToolResult, execute, selection, signature
 from gauntlet.errors import GauntletError
 from gauntlet.models import Finding, Location, RunContext, stable_id
+from gauntlet.pipeline.triage import GUIDANCE, covering_tests
 
 INSTRUCTION = (
     "Determine whether this mutation changes specified observable behavior. If yes, add the "
@@ -93,6 +94,7 @@ def mutation_finding(
     if span is None:
         raise GauntletError("Mutation outcome refers to an unknown function", 1)
     line = source[:start].count(b"\n") + 1
+    tests, attribution = covering_tests(context.root, file, line)
     return Finding(
         stable_id(tool, file, namespace, form, start, end, original, replacement),
         tool,
@@ -108,6 +110,10 @@ def mutation_finding(
             "start_byte": start,
             "end_byte": end,
             "instruction": INSTRUCTION,
+            "mutation_description": mutation_message(state, original, replacement),
+            "covering_tests": tests,
+            "covering_tests_provenance": attribution,
+            "triage_guidance": GUIDANCE,
         },
     )
 

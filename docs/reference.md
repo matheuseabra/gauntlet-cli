@@ -303,3 +303,25 @@ Generate coverage for the intended head rather than reusing unrelated reports.
 | `3` | A blocking finding was reported |
 | `4` | Invalid configuration, path, or repository context |
 | `5` | Required external tool, command, or coverage artifact is missing |
+
+## Mutation triage and acceptance hygiene
+
+Survivors retain their stable ID and source location, plus `mutation_description`,
+`triage_guidance`, `covering_tests`, and `covering_tests_provenance`. Named covering
+tests come only from coverage.py contexts for the exact mutated line, when present
+in `.coverage`. Plain LCOV does not identify tests. An empty list means unavailable,
+not that no test covers the line; context evidence must belong to the current run.
+`explain` asks for a specification-based real-gap/equivalent/out-of-scope classification.
+
+An acceptance requires `id` and a nonempty `reason`; optional `expires = 2026-12-31`
+(or a quoted ISO date) is valid through that UTC date. Expired entries stop
+suppressing findings and produce review findings. IDs not observed in the current
+scope produce `orphaned-acceptance` review findings; a changed-only selection cannot
+prove the ID disappeared from the entire repository. Hygiene also runs on empty
+source selections.
+
+Review-only anti-gaming signals report production/survivor location co-changes,
+new Python tests without syntactic assertions or recognized oracles, and new
+acceptances accompanying changed covered code. These are correlations, not proof
+of gaming. Helpers may assert; assertion presence does not prove an independent
+behavioral oracle. Other languages' assertion-free tests are currently unverified.
