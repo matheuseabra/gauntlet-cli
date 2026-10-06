@@ -1,0 +1,31 @@
+name: Set up Gauntlet
+description: Install this Gauntlet revision and its pinned external analyzers in one isolated environment.
+inputs:
+  python-version:
+    description: Compatible Python version for the quality tools.
+    default: '3.12'
+  environment-path:
+    description: Optional virtual environment location (defaults to runner temporary storage).
+    default: ''
+outputs:
+  bin-path:
+    description: Directory containing Gauntlet and analyzer executables.
+    value: ${{ steps.setup.outputs.bin_path }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install quality tools
+      id: setup
+      shell: bash
+      env:
+        QUALITY_ENVIRONMENT: ${{ inputs.environment-path || format('{0}/gauntlet-tools', runner.temp) }}
+        GAUNTLET_PYTHON: python
+      run: |
+        set -euo pipefail
+        bash "$GITHUB_ACTION_PATH/scripts/setup-tools.sh" "$QUALITY_ENVIRONMENT"
+        quality_bin="$(cd "$QUALITY_ENVIRONMENT/bin" && pwd)"
+        echo "$quality_bin" >> "$GITHUB_PATH"
+        echo "bin_path=$quality_bin" >> "$GITHUB_OUTPUT"

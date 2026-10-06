@@ -1,6 +1,6 @@
 # Gauntlet Architecture
 
-Gauntlet coordinates local repository checks and normalizes their results. It owns configuration, source selection, command execution, policy, and reporting. Crapper, Mutator, and Dryer own complexity, mutation, and similarity analysis. Gauntlet does not implement those analyzers, install them, modify project source, or upload reports.
+Gauntlet coordinates local repository checks and normalizes their results. It owns configuration, source selection, command execution, policy, and reporting. Crapper, Mutator, and Dryer own complexity, mutation, and similarity analysis. Checks do not install analyzers, modify project source, or upload reports. A separate explicit setup script/action installs compatible tools before checks.
 
 ## Components and boundaries
 
@@ -32,6 +32,17 @@ flowchart TB
 `check` and `scan` first resolve the Git root, load `gauntlet.toml` when present, detect the project, and build the source selection. Without an explicit mode, both commands use configured mode, which defaults to `changed`; supplying paths without a mode selects `all`. Changed mode considers staged, unstaged, and untracked files. Deleted files are ignored. Supported-language, test, build, dependency, include, exclude, and explicit path filters are applied before analyzers run.
 
 Project detection can supply test and coverage commands. Explicit commands from `gauntlet.toml` override detected commands. Enabled analyzers are resolved before project commands run. A missing executable therefore fails preflight instead of starting a partial check.
+
+`--base REF` selects committed changes from the unique merge base with checked-out
+HEAD. Git validates a clean tracked working tree and resolves immutable base/head
+SHAs. The context carries the merge base to the policy runner so function spans
+are compared with committed changed lines, not an empty working-tree diff. The
+report records all three SHAs. This mode uses explicit analyzer paths rather than
+their native working-tree `--changed` flag.
+
+`scripts/setup-tools.sh` and `action.yml` are explicit network-enabled setup
+surfaces. They share `requirements-tools.txt`; the CLI never invokes them. Cloud
+agents run setup in their own runtime, independently of their dispatcher.
 
 ```mermaid
 sequenceDiagram

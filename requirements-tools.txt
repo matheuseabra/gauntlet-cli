@@ -1,0 +1,7 @@
+# Explicit setup dependencies. Checks never install tools or access the network.
+crapper @ git+https://github.com/unclebob/crapper.git@9f1bead298b5a9d576bdd6319289fcf426e5b18a
+mutator @ git+https://github.com/unclebob/mutator.git@c57f03879a08d2afe8c7e044e86c80bb164afd30
+dryer @ git+https://github.com/unclebob/dryer.git@66ff6d21a42c04afcad89c78a80066176d1294b0
+tree-sitter-language-pack==1.20.0
+tree-sitter==0.26.0
+coverage==7.16.2

@@ -38,6 +38,9 @@ def parser() -> argparse.ArgumentParser:
         mode = sub.add_mutually_exclusive_group()
         mode.add_argument("--changed", dest="mode", action="store_const", const="changed")
         mode.add_argument("--all", dest="mode", action="store_const", const="all")
+        mode.add_argument(
+            "--base", metavar="REF", help="Check committed changes from REF's merge base to HEAD"
+        )
         sub.add_argument("--json", action="store_true", help="Emit only JSON to stdout")
         sub.add_argument("--output", help="JSON report path, relative to repository root")
         sub.add_argument("--quiet", action="store_true", help="Suppress terminal output")
@@ -59,15 +62,22 @@ def _check(args: argparse.Namespace) -> Results:
     root = git.root(Path.cwd())
     config = load(root)
     project = detect(root)
-    changed = git.changed_files(root)
-    mode = args.mode or ("all" if args.paths else config.mode)
+    comparison = git.compare(root, args.base) if args.base is not None else None
+    changed = comparison.files if comparison else git.changed_files(root)
+    mode = "changed" if comparison else args.mode or ("all" if args.paths else config.mode)
     candidates = changed if mode == "changed" else source_files(root)
     selected = select(root, candidates, config, args.paths)
     tools = dict(config.tools)
     for name, disabled in zip(TOOLS, (args.no_crap, args.no_mutate, args.no_dry), strict=True):
         tools[name] = replace(tools[name], enabled=False) if disabled else tools[name]
     config = replace(config, tools=tools, commands=project.commands | config.commands)
-    native = mode == "changed" and not args.paths and not config.include and not config.exclude
+    native = (
+        comparison is None
+        and mode == "changed"
+        and not args.paths
+        and not config.include
+        and not config.exclude
+    )
     context = RunContext(
         root,
         mode,
@@ -78,8 +88,15 @@ def _check(args: argparse.Namespace) -> Results:
         args.command == "scan",
         args.quiet,
         args.verbose,
+        comparison_base=comparison.merge_base_sha if comparison else None,
     )
     results = run(context)
+    if comparison:
+        results.repository.update(
+            base_sha=comparison.base_sha,
+            head_sha=comparison.head_sha,
+            merge_base_sha=comparison.merge_base_sha,
+        )
     results.repository["project"] = {
         "languages": project.languages,
         "package_manager": project.package_manager,

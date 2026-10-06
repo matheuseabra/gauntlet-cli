@@ -139,6 +139,60 @@ class CliIntegrationTests(unittest.TestCase):
                 all(f["accepted"] and not f["blocking"] for f in accepted_data["findings"])
             )
 
+            # A clean committed head must retain the changed lines for CRAP
+            # policy, not fall back to the now-empty working-tree diff.
+            accept_path.unlink()
+            git(root, "add", "src/retry.py")
+            git(root, "commit", "-qm", "committed change")
+            committed = call(root, "check", "--base", "HEAD~1", "--json")
+            committed_data = json.loads(committed.stdout)
+            self.assertEqual(committed.returncode, 3, committed.stdout + committed.stderr)
+            committed_crap = next(
+                f for f in committed_data["findings"] if f["rule"] == "crap-score"
+            )
+            self.assertTrue(committed_crap["blocking"])
+            self.assertTrue(committed_crap["metadata"]["changed"])
+            self.assertEqual(committed_data["repository"]["selected_files"], ["src/retry.py"])
+            self.assertEqual(len(committed_data["repository"]["head_sha"]), 40)
+
+            # A later edit outside the unchanged complex function must not
+            # block its existing CRAP finding. Only accept the fixture survivor.
+            accept_path.write_text(
+                f'[[finding]]\nid = "{survivor["id"]}"\nreason = "Reviewed fixture."\n'
+            )
+            source.write_text(source.read_text() + "\n# documentation outside the function\n")
+            git(root, "add", "src/retry.py")
+            git(root, "commit", "-qm", "comment only")
+            outside = call(root, "check", "--base", "HEAD~1", "--json")
+            outside_data = json.loads(outside.stdout)
+            self.assertEqual(outside.returncode, 0, outside.stdout + outside.stderr)
+            outside_crap = next(f for f in outside_data["findings"] if f["rule"] == "crap-score")
+            self.assertFalse(outside_crap["blocking"])
+            self.assertFalse(outside_crap["metadata"]["changed"])
+
+    def test_base_empty_scope_stays_empty_and_conflicting_flags_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            git(root, "init", "-q")
+            git(root, "config", "user.email", "tests@example.invalid")
+            git(root, "config", "user.name", "Tests")
+            (root / "existing.py").write_text("def value(): return 1\n")
+            git(root, "add", ".")
+            git(root, "commit", "-qm", "baseline")
+            result = call(root, "check", "--base", "HEAD", "--json")
+            data = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(data["repository"]["selected_files"], [])
+            self.assertEqual(data["checks"], {})
+            self.assertEqual(data, json.loads((root / ".gauntlet/results.json").read_text()))
+            for flag in ("--changed", "--all"):
+                self.assertEqual(
+                    call(root, "check", "--base", "HEAD", flag, "--json").returncode, 4
+                )
+            self.assertEqual(call(root, "scan", "--base", "HEAD", "--json").returncode, 0)
+            self.assertEqual(call(root, "check", "--base", "not-a-ref", "--json").returncode, 4)
+            self.assertEqual(call(root, "check", "--base", "", "--json").returncode, 4)
+
 
 CRAPPER_TOOL = """#!/usr/bin/env python3
 from pathlib import Path

@@ -93,6 +93,7 @@ Configure only the commands your project uses. `doctor` checks readiness without
 | --- | --- |
 | `gauntlet` or `gauntlet check` | Check staged, unstaged, and untracked source changes |
 | `gauntlet check --all` | Check the entire repository |
+| `gauntlet check --base main` | Check committed changes from the merge base with `main` to the checked-out `HEAD` |
 | `gauntlet check src/domain` | Check a specific file or directory |
 | `gauntlet scan` | Inspect hotspots without tests, coverage, or mutation execution |
 | `gauntlet check --json` | Get JSON-only output for an agent or CI |
@@ -123,6 +124,33 @@ Do not bypass or weaken the checks.
 ```
 
 For machine-readable results, run `gauntlet check --json`. It prints only JSON to stdout and also saves `.gauntlet/results.json`. The same command works in CI, where a non-zero exit code fails the build on blocking findings.
+
+On a clean CI checkout, use `gauntlet check --base BASE_SHA --json`; working-tree
+`--changed` does not select committed PR changes. Fetch base/head history first.
+`--base` requires a clean tracked working tree, excludes untracked/deleted files,
+and preserves committed line ranges for CRAP policy. JSON records the resolved
+base, head, and merge-base SHAs. It can also be used with `scan` and explicit paths.
+
+For explicit installation of Gauntlet and compatible pinned analyzers, run
+`bash scripts/setup-tools.sh /path/to/tool-environment` from this checkout,
+then activate that environment. Setup uses the network; analysis does not invoke
+setup. The [setup action](action.yml) runs the same installer in GitHub Actions:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+    persist-credentials: false
+- uses: matheuseabra/gauntlet-cli@<reviewed-commit-sha>
+- run: gauntlet check --base "$BASE_SHA" --json
+  env:
+    BASE_SHA: ${{ github.event.pull_request.base.sha }}
+```
+
+Run this example in a secretless `pull_request` job with read-only permissions.
+Install project runtimes and locked dependencies separately. Local/cloud agents
+must run setup inside their own environment; GitHub runner installation does
+not provision a remote agent.
 
 ## More details
 
