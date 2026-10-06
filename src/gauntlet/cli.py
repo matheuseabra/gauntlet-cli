@@ -43,6 +43,9 @@ def parser() -> argparse.ArgumentParser:
         mode.add_argument(
             "--base", metavar="REF", help="Check committed changes from REF's merge base to HEAD"
         )
+        if name == "check":
+            sub.add_argument("--max-mutants", type=int, help="Maximum scheduled mutation sites")
+            sub.add_argument("--timeout", type=float, help="Mutation stage time budget in seconds")
         sub.add_argument("--json", action="store_true", help="Emit only JSON to stdout")
         sub.add_argument("--output", help="JSON report path, relative to repository root")
         sub.add_argument("--quiet", action="store_true", help="Suppress terminal output")
@@ -72,6 +75,19 @@ def _check(args: argparse.Namespace) -> Results:
     tools = dict(config.tools)
     for name, disabled in zip(TOOLS, (args.no_crap, args.no_mutate, args.no_dry), strict=True):
         tools[name] = replace(tools[name], enabled=False) if disabled else tools[name]
+    limits = {}
+    if getattr(args, "max_mutants", None) is not None:
+        from gauntlet.config import validate
+
+        validate(args.max_mutants, int, "--max-mutants", 1)
+        limits["max_mutants"] = args.max_mutants
+    if getattr(args, "timeout", None) is not None:
+        from gauntlet.config import validate
+
+        validate(args.timeout, float, "--timeout", 0.001)
+        limits["timeout"] = args.timeout
+    if limits:
+        tools["mutator"] = replace(tools["mutator"], **limits)
     config = replace(config, tools=tools, commands=project.commands | config.commands)
     support.require(root, candidates, config, args.paths)
     native = (

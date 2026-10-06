@@ -26,6 +26,22 @@ def render(results: Results) -> str:
             f"{summary['reviews']} reviews",
         ]
     )
+    if results.timings_ms:
+        lines.append(
+            "Timing: "
+            + " · ".join(
+                f"{stage} {duration / 1000:.3f}s" for stage, duration in results.timings_ms.items()
+            )
+        )
+    if results.mutation:
+        lines.append(
+            "Mutation: " + f"{results.mutation.get('completed_sites', 0)} completed / "
+            f"{results.mutation.get('inventory_sites')} inventoried; "
+            f"{results.mutation.get('cache_hits', 0)} cached files"
+        )
+    if results.status == "partial":
+        lines.append("GAUNTLET PARTIAL — analysis incomplete; not a pass")
+        return "\n".join(lines)
     label = "GAUNTLET FAILED" if results.exit_code else "GAUNTLET PASSED"
     if not results.exit_code and summary["reviews"]:
         label += " WITH REVIEW FINDINGS"

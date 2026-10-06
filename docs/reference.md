@@ -55,20 +55,18 @@ The upstream Crapper report has no file or line fields. Gauntlet runs Crapper on
 
 Mutator outcome offsets are UTF-8 byte positions. Gauntlet checks the source bytes before turning an outcome into a finding. A surviving mutant blocks by default. Upstream Mutator currently reports killed and survived outcomes; Gauntlet also reserves state names for uncovered, invalid, equivalent, accepted, and timeout outcomes. A survivor means investigation is required. Preserve specified behavior. Add the smallest meaningful test when a mutant changes that behavior. Do not change production code only to kill a mutant.
 
-The pinned Mutator defaults to incremental execution: survivors and mutations in
-new or rewritten functions rerun, while killed outcomes in unchanged functions
-can be carried forward from `.metrics/mutate`. Gauntlet does not force
-`--mutate-all` or expose an equivalent flag. If you need to diagnose every covered
-site again, use upstream Mutator's `--mutate-all` with your project's test command.
-Killed outcomes are omitted from Gauntlet findings; uncovered-site counts remain
-nonblocking warnings.
+On a mutation cache miss, Gauntlet forces upstream `--mutate-all`: a previous
+killed result must not hide a gap after tests change. Complete, validated raw
+snapshots can be reused through Gauntlet's content cache. Policy, acceptance, and
+covering-test context attribution are reapplied on every run. Killed outcomes
+are omitted from findings; uncovered-site counts remain nonblocking warnings.
 
-Dryer findings are review suggestions and do not block by default. Upstream changed mode compares selected changed files with each other. It cannot find a duplicate against an unchanged file in the current release. Dryer currently does not analyze JavaScript or JSX files. Gauntlet marks Dryer as skipped when the selection contains no language Dryer supports.
+Dryer findings are review suggestions and do not block by default. Upstream changed mode compares selected changed files with each other. It cannot find a duplicate against an unchanged file in the current release. Dryer currently does not analyze JavaScript or JSX files. Preflight fails when selected JavaScript needs enabled Dryer; explicitly disabling that analyzer permits Crapper and Mutator. See the [support matrix](language-support.md).
 
 ## Commands
 
 ```text
-gauntlet check [--changed | --all | --base REF] [PATH ...]
+gauntlet check [--changed | --all | --base REF] [--max-mutants N] [--timeout SECONDS] [PATH ...]
 gauntlet scan [--changed | --all | --base REF] [PATH ...]
 gauntlet doctor [--json]
 gauntlet init
@@ -143,9 +141,9 @@ JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`), Go (`.go`), Rust (`.rs`), Java (`.ja
 and Clojure (`.clj`, `.cljc`, `.cljs`, `.bb`). Test/spec filenames and directories,
 TypeScript declarations (`.d.ts`), dependencies, build outputs, and Gauntlet state
 are excluded; see [`discovery.py`](../src/gauntlet/discovery.py) for the complete
-filter list. Shell, Markdown, and workflow files are not analyzed.
+filter list. Recognized unsupported code, including Swift and Shell, fails preflight unless intentionally excluded by scope. Markdown and workflow assets are not analyzed. Unknown code extensions are unverified.
 
-An empty selection passes after configuration/acceptance validation, without
+An empty selection passes after language/configuration/acceptance validation, without
 checking analyzer executables, running project commands, or requiring coverage.
 This includes a test-only change: a pass does not prove those tests ran. Run native
 validation separately and include `repository.selected_files` in your handoff.
@@ -157,7 +155,7 @@ nor a coverage command exists and a coverage-dependent analyzer is enabled.
 
 ## Findings and policy
 
-The result has schema `version: 1`, stable IDs, sorted findings, checks, and a summary. Every finding has a general severity (`info`, `review`, `warning`, or `error`), a location when the tool can supply one, tool metadata, and a `blocking` decision. Reports contain no timestamps or durations, so equivalent repository and analyzer state produces stable JSON.
+The result has schema `version: 1`, stable IDs, sorted findings, checks, and a summary. Every finding has a general severity (`info`, `review`, `warning`, or `error`), a location when the tool can supply one, tool metadata, and a `blocking` decision. Finding IDs and sorting are stable; `timings_ms` and mutation cache/budget metadata vary between runs. Whole reports are not byte-stable.
 
 High CRAP in an unchanged function does not block when Mutator supplies function
 spans. Without those spans, CRAP policy uses changed files as an approximation,
@@ -189,12 +187,13 @@ Report selected source scope and native validation results.
 
 Do not bypass or weaken Gauntlet checks.
 
-For surviving mutants, determine whether the mutant changes specified
-observable behavior. If it does, add or improve the smallest meaningful test.
-Do not modify production code solely to kill a mutant.
+Classify each survivor as real gap / equivalent / out-of-scope against specified
+observable behavior. For real gaps, add a meaningful specification-based test.
+Record equivalents in accept.toml with a stable ID and concrete reason.
+Do not contort tests or modify production behavior solely to kill a mutant.
 
 For CRAP findings, preserve behavior. Simplify excessive branching or improve
-meaningful tests when appropriate.
+meaningful tests when appropriate. Do not split functions solely to lower a score.
 
 For Dryer findings, do not automatically deduplicate. First determine whether
 the similarity is accidental, intentional, coincidental, or indicates a
@@ -303,6 +302,7 @@ Generate coverage for the intended head rather than reusing unrelated reports.
 | `3` | A blocking finding was reported |
 | `4` | Invalid configuration, path, or repository context |
 | `5` | Required external tool, command, or coverage artifact is missing |
+| `6` | Mutation analysis partial with no blocking finding (never a pass) |
 
 ## Mutation triage and acceptance hygiene
 
@@ -342,7 +342,7 @@ mode = "block"
 
 The first matching rule wins. Unmatched paths retain global policy; an omitted
 rule threshold inherits `policy.crap_threshold`. `mode` is `block` or `review`.
-Review rules retain findings rather than excluding code. Block rules still require
+Review rules retain findings rather than excluding code. Rules apply only to selected scope; include UI paths in scope when using the example UI review rule. Block rules still require
 changed function spans (or the changed-file fallback) and respect the global
 `block_crap_regressions` setting.
 
@@ -352,3 +352,55 @@ exceeds the threshold, coverage alone cannot get below it. Otherwise the CRAP
 formula estimates coverage needed without structural changes. This is score
 leverage, not a measured cost estimate or proof that tests are meaningful.
 `explain` warns against splitting functions solely to lower a score.
+
+## Mutation runtime controls
+
+```toml
+[tools.mutator]
+max_workers = 4
+max_mutants = 100   # omit for unlimited new sites
+timeout = 600     # seconds for the entire mutation stage
+cache = true       # false for tests depending on external state
+```
+
+`check --max-mutants N --timeout SECONDS` overrides these settings for that run.
+Both must be positive; timeout may be fractional. These options affect mutation
+only, including inventory, cache fingerprinting, and worker execution. They do
+not cap coverage, Crapper, or Dryer; configure those command/tool timeouts separately.
+
+Mutator's pinned CLI selects lines, not individual sites. Gauntlet scans the
+selected inventory and schedules whole line groups that fit N; a line with more
+than N sites may cause zero execution. Counts refer to mutation sites, not test
+processes or wall-clock predictions. Valid cache hits do not consume the budget
+for **new** sites. The report lists `inventory_sites`, `scheduled_new_sites`,
+`completed_sites` (killed + survived), `uncovered_sites`, `reused_sites`, cache hits,
+and `reported_fraction` ((completed + uncovered) / inventory). Uncovered sites
+were not executed. When inventory itself times out, inventory/fraction are null,
+not an invented denominator. A count or timeout truncation sets status `partial`
+and `partial_reason`; exit is 6, or 3 when an observed finding blocks. Later tool
+errors still fail with their own code. Partial snapshots are never cached.
+
+Cache files under `.gauntlet/mutation-cache/` contain validated raw evidence, not
+policy decisions. Keys hash repository files (including tests, helpers, and local
+resources), test content separately, coverage artifacts, config, environment,
+coordinator code, executable bytes, installed Python distribution contents,
+editable dependency sources, and cached Python grammar bytes. Deleting cache is
+safe. Test edits invalidate killed evidence and force re-execution. Corrupt or
+incomplete cache entries rerun; report/source identities are validated before reuse.
+
+Caching currently supports Python with transparent `python -m pytest` or
+`python -m unittest` commands and fingerprintable installed runtimes. Opaque
+commands, other languages, external PYTHONPATH, symlinks, oversized repositories,
+missing runtime inventories, or uncertain fingerprints rerun conservatively.
+Generated state/dependency/build directories are excluded from repository hashing;
+installed dependencies are fingerprinted separately. Tests whose outcomes depend
+on network services, clock, databases, or other external state must set
+`cache = false`; content hashes cannot establish external-state equivalence.
+Fingerprinting has measurable overhead and is not a guaranteed speedup.
+
+Results schema v1 adds `timings_ms` for coverage, Crapper, Mutator, and Dryer;
+configured native stages also have entries. Values are integer elapsed milliseconds
+and include adapter overhead. Zero can mean skipped, disabled, reused coverage,
+or too short to round; consult `checks`. Terminal output shows the same timing and
+mutation completion summary. No stage timings are promised for errors during CLI
+preparation. See [evaluation](evaluation.md) for measured controls and limitations.

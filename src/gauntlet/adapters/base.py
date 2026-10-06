@@ -17,6 +17,7 @@ class ToolResult:
     findings: list[Finding] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
     status: str = "passed"
+    details: dict = field(default_factory=dict)
 
 
 class ToolAdapter(Protocol):
@@ -57,17 +58,24 @@ def selection(context: RunContext) -> list[str]:
 
 
 def execute(
-    name: str, args: list[str], context: RunContext, allowed: tuple[int, ...] = (0,)
+    name: str,
+    args: list[str],
+    context: RunContext,
+    allowed: tuple[int, ...] = (0,),
+    timeout: float | None = None,
+    allow_timeout: bool = False,
 ) -> ProcessResult:
     command = [resolve(name, context), "--root", str(context.root), *args]
-    result = run(command, context.root, context.config.tools[name].timeout)
+    result = run(
+        command, context.root, context.config.tools[name].timeout if timeout is None else timeout
+    )
     if context.verbose:
         print(f"[{name}] {' '.join(command)}", file=sys.stderr)
         print(result.stdout, file=sys.stderr, end="")
         print(result.stderr, file=sys.stderr, end="")
-    if result.timed_out:
+    if result.timed_out and not allow_timeout:
         raise GauntletError(f"{name} timed out. Adjust tools.{name}.timeout.", 1, name)
-    if result.exit_code not in allowed:
+    if not result.timed_out and result.exit_code not in allowed:
         raise GauntletError(
             f"{name} exited {result.exit_code}; run it directly or use --verbose for diagnostics.",
             1,

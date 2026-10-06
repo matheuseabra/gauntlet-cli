@@ -3,7 +3,7 @@ import re
 from dataclasses import replace
 
 from gauntlet.adapters import edn
-from gauntlet.adapters.base import Adapter, ToolResult, execute, selection, signature
+from gauntlet.adapters.base import Adapter, ToolResult, execute, selection
 from gauntlet.errors import GauntletError
 from gauntlet.models import Finding, Location, RunContext, stable_id
 from gauntlet.pipeline.triage import GUIDANCE, covering_tests
@@ -197,49 +197,12 @@ class MutatorAdapter(Adapter):
         return findings
 
     def run(self, context: RunContext) -> ToolResult:
-        args = (
-            ["--scan", "--no-coverage"]
-            if context.scan
-            else [
-                "--use-existing-coverage",
-                "--max-workers",
-                str(context.config.tools[self.name].max_workers),
-            ]
+        if not context.scan:
+            from gauntlet.adapters.mutation_run import run
+
+            return run(self, context)
+        result = execute(self.name, ["--scan", "--no-coverage", *selection(context)], context)
+        return ToolResult(
+            self.scan(result.stdout, context),
+            ["Mutation scan inventories sites; no tests or mutants were run."],
         )
-        if not context.scan and "test" in context.config.commands:
-            args.extend(["--test-command", context.config.commands["test"]])
-        metrics = context.root / ".metrics/mutate"
-        before = {path: signature(path) for path in metrics.rglob("*.edn")}
-        result = execute(self.name, [*args, *selection(context)], context, allowed=(0, 2, 3))
-        if result.exit_code == 2:
-            raise GauntletError(
-                "Mutator baseline failed (or its Crapper dependency is missing). "
-                "Run mutator directly to diagnose the prerequisite.",
-                2,
-                "mutator",
-            )
-        if context.scan:
-            return ToolResult(
-                self.scan(result.stdout, context),
-                ["Mutation scan inventories sites; no tests or mutants were run."],
-            )
-        snapshots = [
-            edn.read(path)
-            for path in sorted(metrics.rglob("*.edn"))
-            if signature(path) != before.get(path)
-        ]
-        reported = {loc.file for data in snapshots for loc in locations(data, context).values()}
-        expected = (
-            context.function_files if context.function_files is not None else context.selected_files
-        )
-        if set(expected) - reported:
-            raise GauntletError(
-                "Mutator did not write fresh function reports for selected sources", 1
-            )
-        findings = [finding for data in snapshots for finding in self.normalize(data, context)]
-        if result.exit_code == 3 and not any(f.rule == "surviving-mutant" for f in findings):
-            raise GauntletError(
-                "Mutator reported survivors but supplied no matching survivor evidence", 1
-            )
-        self.snapshots = snapshots
-        return ToolResult(findings)

@@ -209,6 +209,11 @@ from pathlib import Path
 MUTATOR_TOOL = """#!/usr/bin/env python3
 import json
 from pathlib import Path
+import sys
+if "--scan" in sys.argv:
+    print("Scan: 1 mutation sites in src/retry.py")
+    print("  src/retry.py:2 >= -> >  [defn/allowed]")
+    raise SystemExit(0)
 source = Path("src/retry.py").read_bytes()
 start = source.index(b">=")
 key = json.dumps(["src/retry.py", "retry", "defn/allowed", start, start+2, ">=", ">"])
