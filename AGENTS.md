@@ -26,7 +26,7 @@ Name test modules `test_*.py` and test methods `test_<behavior>`. Add focused un
 
 ## Commits and Pull Requests
 
-This checkout has no commit history yet. Use scoped imperative messages such as `fix(cli): keep JSON output clean` or `feature(policy): report accepted findings`. A pull request should explain the behavior change, list checks run, and link a related issue when one exists. For CLI changes, include a short command example and describe any output or exit-code changes.
+Use scoped imperative messages such as `fix(cli): keep JSON output clean` or `feature(policy): report accepted findings`. A pull request should explain the behavior change, list checks run, and link a related issue when one exists. For CLI changes, include a short command example and describe any output or exit-code changes.
 
 ## Configuration and Safety
 
